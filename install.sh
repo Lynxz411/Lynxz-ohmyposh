@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 set -e
 
@@ -7,9 +7,9 @@ THEME_NAME="lynxz.omp.json"
 TARGET_DIR="$HOME/.config/ohmyposh"
 TARGET_THEME="$TARGET_DIR/$THEME_NAME"
 
-echo "========================="
-echo " Lynxz OhMyPosh Installer"
-echo "========================="
+echo "======================================"
+echo "⚡ Lynxz OhMyPosh Theme Installer"
+echo "======================================"
 echo ""
 
 # -----------------------------
@@ -18,11 +18,13 @@ echo ""
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     DISTRO=$ID
-    echo "Detected distro: $DISTRO"
+    echo "✔ Detected distro: $DISTRO"
 else
     echo "❌ Cannot detect Linux distro."
     exit 1
 fi
+
+echo ""
 
 # -----------------------------
 # Install dependencies
@@ -40,27 +42,32 @@ install_deps() {
             sudo dnf install -y curl unzip fontconfig
         ;;
         *)
-            echo "⚠ Unsupported distro for auto-deps. Install curl unzip fontconfig manually."
+            echo "⚠️  Unsupported distro for auto-deps. Install curl unzip fontconfig manually."
         ;;
     esac
 }
 
 # -----------------------------
-# Detect Shell 
+# Detect Shell
 # -----------------------------
-CURRENT_SHELL="$(basename "$SHELL")"
+CURRENT_SHELL=$(basename "$SHELL")
 
-echo "Detected shell: $CURRENT_SHELL"
+# Fallback to bash if shell detection fails
+if [ -z "$CURRENT_SHELL" ]; then
+    CURRENT_SHELL="bash"
+fi
+
+echo "✔ Detected shell: $CURRENT_SHELL"
 echo ""
 
 # -----------------------------
 # Check & Auto Install Oh My Posh
 # -----------------------------
 if ! command -v oh-my-posh &> /dev/null; then
-    echo "⚠ oh-my-posh not found. Auto installing now..."
-    
+    echo "⚠️  oh-my-posh not found. Installing dependencies..."
     install_deps
-
+    
+    echo "📦 Installing oh-my-posh..."
     case "$DISTRO" in
         arch|cachyos|manjaro)
             sudo pacman -S --needed oh-my-posh
@@ -75,10 +82,10 @@ if ! command -v oh-my-posh &> /dev/null; then
             curl -s https://ohmyposh.dev/install.sh | bash
         ;;
     esac
-
-    echo "✅ oh-my-posh installed"
+    
+    echo "✔ oh-my-posh installed"
 else
-    echo "✅ oh-my-posh already installed"
+    echo "✔ oh-my-posh already installed"
 fi
 
 echo ""
@@ -86,30 +93,30 @@ echo ""
 # -----------------------------
 # Install JetBrainsMono Nerd Font (if missing)
 # -----------------------------
-if fc-list | grep -qi "JetBrainsMono Nerd"; then
-    echo "✅ JetBrainsMono Nerd Font already installed."
+if fc-list 2>/dev/null | grep -qi "JetBrainsMono Nerd"; then
+    echo "✔ JetBrainsMono Nerd Font already installed."
 else
-    echo "⚠ JetBrainsMono Nerd Font not found. Installing..."
+    echo "🧠 Installing JetBrainsMono Nerd Font..."
 
     FONT_DIR="$HOME/.local/share/fonts"
     mkdir -p "$FONT_DIR"
 
     TEMP_DIR="$(mktemp -d)"
-    cd "$TEMP_DIR"
+    cd "$TEMP_DIR" || exit 1
 
-    echo "Downloading font..."
+    echo "   Downloading font..."
     curl -fsSL -o JetBrainsMono.zip \
         https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip
 
     unzip -q JetBrainsMono.zip -d JetBrainsMono
-    cp JetBrainsMono/*.ttf "$FONT_DIR"
+    cp JetBrainsMono/*.ttf "$FONT_DIR" 2>/dev/null || true
 
-    cd -
+    cd - > /dev/null || exit 1
     rm -rf "$TEMP_DIR"
 
-    fc-cache -fv
+    fc-cache -fv > /dev/null 2>&1 || true
 
-    echo "✅ JetBrainsMono Nerd Font installed."
+    echo "✔ JetBrainsMono Nerd Font installed."
 fi
 
 echo ""
@@ -119,48 +126,67 @@ echo ""
 # -----------------------------
 mkdir -p "$TARGET_DIR"
 
+# Backup existing theme if present
+if [ -f "$TARGET_THEME" ]; then
+    echo "💾 Backing up existing theme..."
+    mv "$TARGET_THEME" "$TARGET_THEME.bak.$(date +%s)"
+fi
+
 # -----------------------------
 # Download Theme
 # -----------------------------
-echo "Downloading theme..."
+echo "📥 Downloading theme..."
 curl -fsSL "$REPO_RAW_BASE/$THEME_NAME" -o "$TARGET_THEME"
 
-echo "✅ Theme installed to $TARGET_THEME"
+echo "✔ Theme installed to $TARGET_THEME"
 echo ""
 
 # -----------------------------
 # Inject Config
 # -----------------------------
-if [ "$CURRENT_SHELL" = "bash" ]; then
-    CONFIG_FILE="$HOME/.bashrc"
-    INIT_LINE='eval "$(oh-my-posh init bash --config '"$TARGET_THEME"')"'
-elif [ "$CURRENT_SHELL" = "zsh" ]; then
-    CONFIG_FILE="$HOME/.zshrc"
-    INIT_LINE='eval "$(oh-my-posh init zsh --config '"$TARGET_THEME"')"'
-elif [ "$CURRENT_SHELL" = "fish" ]; then
-    CONFIG_FILE="$HOME/.config/fish/config.fish"
-    INIT_LINE="oh-my-posh init fish --config $TARGET_THEME | source"
-    mkdir -p "$HOME/.config/fish"
-else
-    echo "⚠ Unsupported shell. Add manually:"
-    echo "oh-my-posh init SHELL --config $TARGET_THEME"
-    exit 0
-fi
+case "$CURRENT_SHELL" in
+    bash)
+        CONFIG_FILE="$HOME/.bashrc"
+        INIT_LINE='eval "$(oh-my-posh init bash --config '$TARGET_THEME'"'
+        ;;
+    zsh)
+        CONFIG_FILE="$HOME/.zshrc"
+        INIT_LINE='eval "$(oh-my-posh init zsh --config '$TARGET_THEME'"'
+        ;;
+    fish)
+        CONFIG_FILE="$HOME/.config/fish/config.fish"
+        INIT_LINE="oh-my-posh init fish --config $TARGET_THEME | source"
+        mkdir -p "$HOME/.config/fish"
+        ;;
+    *)
+        echo "⚠️  Unsupported shell. Add manually:"
+        echo "oh-my-posh init SHELL --config $TARGET_THEME"
+        exit 0
+        ;;
+esac
 
 # Create config file if missing
 touch "$CONFIG_FILE"
 
-if grep -Fxq "$INIT_LINE" "$CONFIG_FILE"; then
-    echo "ℹ Already configured."
+if grep -Fxq "$INIT_LINE" "$CONFIG_FILE" 2>/dev/null; then
+    echo "ℹ️  Theme already configured."
 else
+    echo "🔧 Injecting theme into shell config..."
     echo "" >> "$CONFIG_FILE"
     echo "# Lynxz OhMyPosh Theme" >> "$CONFIG_FILE"
     echo "$INIT_LINE" >> "$CONFIG_FILE"
-    echo "✅ Config injected into $CONFIG_FILE"
+    echo "✔ Config injected into $CONFIG_FILE"
 fi
 
 echo ""
 echo "======================================"
-echo " Installation Complete!"
-echo " Restart your terminal or run: source $CONFIG_FILE"
+echo "✅ Installation Complete!"
 echo "======================================"
+echo ""
+echo "🎉 Lynxz OhMyPosh theme is ready!"
+echo ""
+echo "Next steps:"
+echo "  1. Restart your terminal or run: source $CONFIG_FILE"
+echo "  2. Customize theme: nano ~/.config/ohmyposh/lynxz.omp.json"
+echo "  3. Check docs: https://ohmyposh.dev/docs/configuration/overview"
+echo ""

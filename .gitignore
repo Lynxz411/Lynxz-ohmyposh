@@ -1,0 +1,64 @@
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Backups & Temporary files
+*.bak
+*.tmp
+*.backup
+*.orig
+*.rej
+
+# Logs
+*.log
+logs/
+
+# Cache files
+.cache/
+*.cache
+__pycache__/
+*.pyc
+
+# OS files
+Thumbs.db
+.DS_Store
+*.swp
+*.swo
+
+# Node modules
+node_modules/
+npm-debug.log
+yarn.error.log
+
+# Python
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+# Generated files
+dist/
+build/
+*.egg-info/
+
+# Temporary directories
+temp/
+tmp/
