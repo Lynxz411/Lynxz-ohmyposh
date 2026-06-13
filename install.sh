@@ -12,10 +12,32 @@ echo "⚡ Lynxz OhMyPosh Theme Installer"
 echo "======================================"
 echo ""
 
-# Detect current shell BEFORE running anything
-CURRENT_SHELL=$(basename "$SHELL")
+# Get the actual login shell from /etc/passwd (more reliable)
+CURRENT_SHELL=$(basename $(grep "^$USER" /etc/passwd | cut -d: -f7))
+
+if [ -z "$CURRENT_SHELL" ] || [ "$CURRENT_SHELL" = "sh" ]; then
+    CURRENT_SHELL=$(basename "$SHELL")
+fi
+
+if [ -z "$CURRENT_SHELL" ] || [ "$CURRENT_SHELL" = "sh" ]; then
+    CURRENT_SHELL="bash"
+fi
+
 echo "✔ Login shell: $CURRENT_SHELL"
 echo ""
+
+# Offer to change shell if not one of the supported ones
+if [ "$CURRENT_SHELL" != "bash" ] && [ "$CURRENT_SHELL" != "zsh" ] && [ "$CURRENT_SHELL" != "fish" ]; then
+    echo "⚠️  Your shell ($CURRENT_SHELL) is not in supported list (bash, zsh, fish)"
+    read -p "Do you want to switch to fish? (y/n) " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        chsh -s /usr/bin/fish
+        CURRENT_SHELL="fish"
+        echo "✔ Shell switched to fish. Please re-run installer in new session."
+        exit 0
+    fi
+fi
 
 # -----------------------------
 # Detect Distro
@@ -178,14 +200,11 @@ if [ ! -f "$TARGET_THEME" ]; then
     exit 1
 fi
 
-# Test theme configuration
-echo "🧪 Testing theme configuration..."
-if $OH_MY_POSH_PATH config "$TARGET_THEME" > /dev/null 2>&1; then
-    echo "✔ Theme configuration is valid"
-elif $OH_MY_POSH_PATH init general --config "$TARGET_THEME" > /dev/null 2>&1; then
+echo "🧪 Validating theme configuration..."
+if $OH_MY_POSH_PATH print primary --config="$TARGET_THEME" > /dev/null 2>&1; then
     echo "✔ Theme configuration is valid"
 else
-    echo "⚠️  Theme validation warning (may still work)"
+    echo "⚠️  Theme may need adjustments, continuing anyway..."
 fi
 
 echo ""
@@ -218,10 +237,13 @@ esac
 # Create config file if missing
 touch "$CONFIG_FILE"
 
-# Remove old oh-my-posh init lines to avoid duplicates
-echo "🧹 Cleaning up old configuration..."
-grep -v "oh-my-posh" "$CONFIG_FILE" > "$CONFIG_FILE.tmp" || true
-mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+# Remove old oh-my-posh init lines to avoid duplicates (properly handled)
+if [ -f "$CONFIG_FILE" ]; then
+    grep -v "oh-my-posh" "$CONFIG_FILE" > "$CONFIG_FILE.tmp" 2>/dev/null || true
+    if [ -f "$CONFIG_FILE.tmp" ]; then
+        mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+    fi
+fi
 
 # Inject new configuration
 echo "🔧 Injecting theme into $CURRENT_SHELL config..."
@@ -289,7 +311,7 @@ elif [ "$CURRENT_SHELL" = "fish" ]; then
     echo "    $ source ~/.config/fish/config.fish"
 fi
 echo ""
-echo "  Option 2 - Open a new terminal window"
+echo "  Option 2 - Close and open a new terminal window"
 echo ""
 if command -v kitty &> /dev/null; then
     echo "  ⚠️  Restart Kitty for font changes to take effect"
@@ -302,5 +324,5 @@ echo "  📚 Documentation:"
 echo "    https://ohmyposh.dev/docs/configuration/overview"
 echo ""
 echo "  🐛 Debug configuration:"
-echo "    $ $OH_MY_POSH_PATH config ~/.config/ohmyposh/lynxz.omp.json"
+echo "    $ $OH_MY_POSH_PATH print primary --config=\"$TARGET_THEME\""
 echo ""
