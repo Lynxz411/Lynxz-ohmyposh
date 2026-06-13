@@ -12,23 +12,9 @@ echo "⚡ Lynxz OhMyPosh Theme Installer"
 echo "======================================"
 echo ""
 
-# Get the actual login shell, not the current shell
-if [ -n "$FISH_VERSION" ]; then
-    CURRENT_SHELL="fish"
-elif [ -n "$ZSH_VERSION" ]; then
-    CURRENT_SHELL="zsh"
-elif [ -n "$BASH_VERSION" ]; then
-    CURRENT_SHELL="bash"
-else
-    CURRENT_SHELL=$(basename "$SHELL")
-fi
-
-# Fallback to bash if shell detection fails
-if [ -z "$CURRENT_SHELL" ] || [ "$CURRENT_SHELL" = "sh" ]; then
-    CURRENT_SHELL="bash"
-fi
-
-echo "✔ Detected shell: $CURRENT_SHELL"
+# Detect current shell BEFORE running anything
+CURRENT_SHELL=$(basename "$SHELL")
+echo "✔ Login shell: $CURRENT_SHELL"
 echo ""
 
 # -----------------------------
@@ -66,10 +52,33 @@ install_deps() {
     esac
 }
 
-# -----------------------------
-# Check & Auto Install Oh My Posh
-# -----------------------------
-if ! command -v oh-my-posh &> /dev/null; then
+# Check if oh-my-posh is installed but broken
+if command -v oh-my-posh &> /dev/null; then
+    echo "🔍 Checking oh-my-posh installation..."
+    if ! oh-my-posh --version &> /dev/null; then
+        echo "⚠️  oh-my-posh found but appears broken. Reinstalling..."
+        
+        case "$DISTRO" in
+            arch|cachyos|manjaro)
+                sudo pacman -R --noconfirm oh-my-posh 2>/dev/null || true
+                sudo pacman -S --needed oh-my-posh
+            ;;
+            ubuntu|debian)
+                sudo apt remove -y oh-my-posh 2>/dev/null || true
+                curl -s https://ohmyposh.dev/install.sh | bash
+            ;;
+            fedora)
+                sudo dnf remove -y oh-my-posh 2>/dev/null || true
+                sudo dnf install -y oh-my-posh
+            ;;
+            *)
+                curl -s https://ohmyposh.dev/install.sh | bash
+            ;;
+        esac
+    else
+        echo "✔ oh-my-posh already installed: $(oh-my-posh --version)"
+    fi
+else
     echo "⚠️  oh-my-posh not found. Installing dependencies..."
     install_deps
     
@@ -88,24 +97,28 @@ if ! command -v oh-my-posh &> /dev/null; then
             curl -s https://ohmyposh.dev/install.sh | bash
         ;;
     esac
-    
-    # Verify installation
-    if ! command -v oh-my-posh &> /dev/null; then
-        echo "❌ oh-my-posh installation failed."
-        echo "Try installing manually: curl -s https://ohmyposh.dev/install.sh | bash"
-        exit 1
-    fi
-    
-    echo "✔ oh-my-posh installed"
-else
-    echo "✔ oh-my-posh already installed"
 fi
 
+# Final verification
+if ! command -v oh-my-posh &> /dev/null; then
+    echo "❌ oh-my-posh installation failed."
+    echo "Try installing manually: curl -s https://ohmyposh.dev/install.sh | bash"
+    exit 1
+fi
+
+echo "✔ oh-my-posh installed successfully"
 echo ""
 
-# Get oh-my-posh path
+# Get oh-my-posh path and version
 OH_MY_POSH_PATH=$(which oh-my-posh)
-echo "✔ Using oh-my-posh from: $OH_MY_POSH_PATH"
+OH_MY_POSH_VERSION=$(oh-my-posh --version 2>/dev/null || echo "unknown")
+echo "ℹ️  Path: $OH_MY_POSH_PATH"
+echo "ℹ️  Version: $OH_MY_POSH_VERSION"
+echo ""
+
+# Ensure PATH is updated for this session
+export PATH="/usr/local/bin:$PATH:$HOME/bin"
+
 echo ""
 
 # -----------------------------
@@ -165,27 +178,39 @@ if [ ! -f "$TARGET_THEME" ]; then
     exit 1
 fi
 
+# Test theme configuration
+echo "🧪 Testing theme configuration..."
+if $OH_MY_POSH_PATH config "$TARGET_THEME" > /dev/null 2>&1; then
+    echo "✔ Theme configuration is valid"
+elif $OH_MY_POSH_PATH init general --config "$TARGET_THEME" > /dev/null 2>&1; then
+    echo "✔ Theme configuration is valid"
+else
+    echo "⚠️  Theme validation warning (may still work)"
+fi
+
+echo ""
+
 # -----------------------------
 # Inject Config
 # -----------------------------
 case "$CURRENT_SHELL" in
     bash)
         CONFIG_FILE="$HOME/.bashrc"
-        INIT_LINE="eval \"\$(oh-my-posh init bash --config $TARGET_THEME)\""
+        INIT_LINE="eval \"\$($OH_MY_POSH_PATH init bash --config $TARGET_THEME)\""
         ;;
     zsh)
         CONFIG_FILE="$HOME/.zshrc"
-        INIT_LINE="eval \"\$(oh-my-posh init zsh --config $TARGET_THEME)\""
+        INIT_LINE="eval \"\$($OH_MY_POSH_PATH init zsh --config $TARGET_THEME)\""
         ;;
     fish)
         CONFIG_FILE="$HOME/.config/fish/config.fish"
-        INIT_LINE="oh-my-posh init fish --config $TARGET_THEME | source"
+        INIT_LINE="$OH_MY_POSH_PATH init fish --config $TARGET_THEME | source"
         mkdir -p "$HOME/.config/fish"
         ;;
     *)
         echo "⚠️  Unsupported shell: $CURRENT_SHELL"
         echo "Add manually:"
-        echo "oh-my-posh init SHELL --config $TARGET_THEME"
+        echo "$OH_MY_POSH_PATH init SHELL --config $TARGET_THEME"
         exit 0
         ;;
 esac
@@ -193,26 +218,30 @@ esac
 # Create config file if missing
 touch "$CONFIG_FILE"
 
-# Check if already configured (exact line match)
-if grep -Fxq "$INIT_LINE" "$CONFIG_FILE" 2>/dev/null; then
-    echo "ℹ️  Theme already configured in $CONFIG_FILE"
-else
-    echo "🔧 Injecting theme into $CURRENT_SHELL config..."
-    echo "" >> "$CONFIG_FILE"
-    echo "# Lynxz OhMyPosh Theme" >> "$CONFIG_FILE"
-    echo "$INIT_LINE" >> "$CONFIG_FILE"
-    echo "✔ Config injected into $CONFIG_FILE"
-fi
+# Remove old oh-my-posh init lines to avoid duplicates
+echo "🧹 Cleaning up old configuration..."
+grep -v "oh-my-posh" "$CONFIG_FILE" > "$CONFIG_FILE.tmp" || true
+mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+
+# Inject new configuration
+echo "🔧 Injecting theme into $CURRENT_SHELL config..."
+echo "" >> "$CONFIG_FILE"
+echo "# Lynxz OhMyPosh Theme" >> "$CONFIG_FILE"
+echo "$INIT_LINE" >> "$CONFIG_FILE"
+echo "✔ Config injected into $CONFIG_FILE"
 
 echo ""
 
 # Verify injection
-if ! grep -Fq "oh-my-posh" "$CONFIG_FILE"; then
+if ! grep -q "oh-my-posh" "$CONFIG_FILE"; then
     echo "⚠️  WARNING: Failed to inject theme into $CONFIG_FILE"
     echo "Please add manually:"
     echo "$INIT_LINE"
     exit 1
 fi
+
+echo "✔ Configuration verified"
+echo ""
 
 # -----------------------------
 # Configure Kitty Terminal (if installed)
@@ -239,15 +268,7 @@ if command -v kitty &> /dev/null; then
     
     echo ""
 else
-    echo "ℹ️  Kitty not detected."
-fi
-
-# Test oh-my-posh configuration
-echo "🧪 Testing oh-my-posh configuration..."
-if oh-my-posh print-config --config "$TARGET_THEME" > /dev/null 2>&1; then
-    echo "✔ Configuration is valid"
-else
-    echo "⚠️  Configuration validation failed"
+    echo "ℹ️  Kitty not detected (optional)."
 fi
 
 echo ""
@@ -257,22 +278,29 @@ echo "======================================"
 echo ""
 echo "🎉 Lynxz OhMyPosh theme is ready!"
 echo ""
-echo "📝 Next steps:"
-echo "  1. Close and reopen your terminal (or source the config file)"
+echo "📝 IMPORTANT - Next steps:"
+echo ""
+echo "  Option 1 - Reload current session:"
 if [ "$CURRENT_SHELL" = "bash" ]; then
-    echo "     source ~/.bashrc"
+    echo "    $ source ~/.bashrc"
 elif [ "$CURRENT_SHELL" = "zsh" ]; then
-    echo "     source ~/.zshrc"
+    echo "    $ source ~/.zshrc"
 elif [ "$CURRENT_SHELL" = "fish" ]; then
-    echo "     source ~/.config/fish/config.fish"
-fi
-if command -v kitty &> /dev/null; then
-    echo "  2. Restart Kitty for font changes to take effect"
-    echo "  3. Customize theme: nano ~/.config/ohmyposh/lynxz.omp.json"
-else
-    echo "  2. Customize theme: nano ~/.config/ohmyposh/lynxz.omp.json"
+    echo "    $ source ~/.config/fish/config.fish"
 fi
 echo ""
-echo "📚 Check docs: https://ohmyposh.dev/docs/configuration/overview"
-echo "🐛 Troubleshoot: oh-my-posh print-config --config ~/.config/ohmyposh/lynxz.omp.json"
+echo "  Option 2 - Open a new terminal window"
+echo ""
+if command -v kitty &> /dev/null; then
+    echo "  ⚠️  Restart Kitty for font changes to take effect"
+fi
+echo ""
+echo "  📝 Customize theme:"
+echo "    $ nano ~/.config/ohmyposh/lynxz.omp.json"
+echo ""
+echo "  📚 Documentation:"
+echo "    https://ohmyposh.dev/docs/configuration/overview"
+echo ""
+echo "  🐛 Debug configuration:"
+echo "    $ $OH_MY_POSH_PATH config ~/.config/ohmyposh/lynxz.omp.json"
 echo ""
