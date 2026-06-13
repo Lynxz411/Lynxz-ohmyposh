@@ -83,6 +83,13 @@ if ! command -v oh-my-posh &> /dev/null; then
         ;;
     esac
     
+    # Verify installation
+    if ! command -v oh-my-posh &> /dev/null; then
+        echo "❌ oh-my-posh installation failed."
+        echo "Try installing manually: curl -s https://ohmyposh.dev/install.sh | bash"
+        exit 1
+    fi
+    
     echo "✔ oh-my-posh installed"
 else
     echo "✔ oh-my-posh already installed"
@@ -147,11 +154,11 @@ echo ""
 case "$CURRENT_SHELL" in
     bash)
         CONFIG_FILE="$HOME/.bashrc"
-        INIT_LINE='eval "$(oh-my-posh init bash --config '$TARGET_THEME'"'
+        INIT_LINE="eval \"\$(oh-my-posh init bash --config $TARGET_THEME)\""
         ;;
     zsh)
         CONFIG_FILE="$HOME/.zshrc"
-        INIT_LINE='eval "$(oh-my-posh init zsh --config '$TARGET_THEME'"'
+        INIT_LINE="eval \"\$(oh-my-posh init zsh --config $TARGET_THEME)\""
         ;;
     fish)
         CONFIG_FILE="$HOME/.config/fish/config.fish"
@@ -169,13 +176,43 @@ esac
 touch "$CONFIG_FILE"
 
 if grep -Fxq "$INIT_LINE" "$CONFIG_FILE" 2>/dev/null; then
-    echo "ℹ️  Theme already configured."
+    echo "ℹ️  Theme already configured in $CURRENT_SHELL."
 else
     echo "🔧 Injecting theme into shell config..."
     echo "" >> "$CONFIG_FILE"
     echo "# Lynxz OhMyPosh Theme" >> "$CONFIG_FILE"
     echo "$INIT_LINE" >> "$CONFIG_FILE"
     echo "✔ Config injected into $CONFIG_FILE"
+fi
+
+echo ""
+
+# -----------------------------
+# Configure Kitty Terminal (if installed)
+# -----------------------------
+KITTY_CONFIG="$HOME/.config/kitty/kitty.conf"
+
+if command -v kitty &> /dev/null; then
+    echo "🐱 Configuring Kitty terminal..."
+    
+    mkdir -p "$HOME/.config/kitty"
+    touch "$KITTY_CONFIG"
+    
+    # Check if font is already configured
+    if grep -q "^font_family.*JetBrainsMono" "$KITTY_CONFIG" 2>/dev/null; then
+        echo "ℹ️  Kitty font already configured."
+    else
+        echo "🔧 Setting Kitty font..."
+        echo "" >> "$KITTY_CONFIG"
+        echo "# OhMyPosh Font Configuration" >> "$KITTY_CONFIG"
+        echo "font_family JetBrainsMono Nerd Font" >> "$KITTY_CONFIG"
+        echo "font_size 11" >> "$KITTY_CONFIG"
+        echo "✔ Kitty configured with JetBrainsMono Nerd Font"
+    fi
+    
+    echo ""
+else
+    echo "ℹ️  Kitty not detected. Install it to auto-configure fonts."
 fi
 
 echo ""
@@ -187,6 +224,11 @@ echo "🎉 Lynxz OhMyPosh theme is ready!"
 echo ""
 echo "Next steps:"
 echo "  1. Restart your terminal or run: source $CONFIG_FILE"
-echo "  2. Customize theme: nano ~/.config/ohmyposh/lynxz.omp.json"
+if command -v kitty &> /dev/null; then
+    echo "  2. Restart Kitty to apply font changes"
+    echo "  3. Customize theme: nano ~/.config/ohmyposh/lynxz.omp.json"
+else
+    echo "  2. Customize theme: nano ~/.config/ohmyposh/lynxz.omp.json"
+fi
 echo "  3. Check docs: https://ohmyposh.dev/docs/configuration/overview"
 echo ""
