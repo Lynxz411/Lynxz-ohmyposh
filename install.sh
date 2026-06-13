@@ -12,6 +12,25 @@ echo "⚡ Lynxz OhMyPosh Theme Installer"
 echo "======================================"
 echo ""
 
+# Get the actual login shell, not the current shell
+if [ -n "$FISH_VERSION" ]; then
+    CURRENT_SHELL="fish"
+elif [ -n "$ZSH_VERSION" ]; then
+    CURRENT_SHELL="zsh"
+elif [ -n "$BASH_VERSION" ]; then
+    CURRENT_SHELL="bash"
+else
+    CURRENT_SHELL=$(basename "$SHELL")
+fi
+
+# Fallback to bash if shell detection fails
+if [ -z "$CURRENT_SHELL" ] || [ "$CURRENT_SHELL" = "sh" ]; then
+    CURRENT_SHELL="bash"
+fi
+
+echo "✔ Detected shell: $CURRENT_SHELL"
+echo ""
+
 # -----------------------------
 # Detect Distro
 # -----------------------------
@@ -48,19 +67,6 @@ install_deps() {
 }
 
 # -----------------------------
-# Detect Shell
-# -----------------------------
-CURRENT_SHELL=$(basename "$SHELL")
-
-# Fallback to bash if shell detection fails
-if [ -z "$CURRENT_SHELL" ]; then
-    CURRENT_SHELL="bash"
-fi
-
-echo "✔ Detected shell: $CURRENT_SHELL"
-echo ""
-
-# -----------------------------
 # Check & Auto Install Oh My Posh
 # -----------------------------
 if ! command -v oh-my-posh &> /dev/null; then
@@ -95,6 +101,11 @@ else
     echo "✔ oh-my-posh already installed"
 fi
 
+echo ""
+
+# Get oh-my-posh path
+OH_MY_POSH_PATH=$(which oh-my-posh)
+echo "✔ Using oh-my-posh from: $OH_MY_POSH_PATH"
 echo ""
 
 # -----------------------------
@@ -148,6 +159,12 @@ curl -fsSL "$REPO_RAW_BASE/$THEME_NAME" -o "$TARGET_THEME"
 echo "✔ Theme installed to $TARGET_THEME"
 echo ""
 
+# Verify theme file
+if [ ! -f "$TARGET_THEME" ]; then
+    echo "❌ Failed to download theme!"
+    exit 1
+fi
+
 # -----------------------------
 # Inject Config
 # -----------------------------
@@ -166,7 +183,8 @@ case "$CURRENT_SHELL" in
         mkdir -p "$HOME/.config/fish"
         ;;
     *)
-        echo "⚠️  Unsupported shell. Add manually:"
+        echo "⚠️  Unsupported shell: $CURRENT_SHELL"
+        echo "Add manually:"
         echo "oh-my-posh init SHELL --config $TARGET_THEME"
         exit 0
         ;;
@@ -175,10 +193,11 @@ esac
 # Create config file if missing
 touch "$CONFIG_FILE"
 
+# Check if already configured (exact line match)
 if grep -Fxq "$INIT_LINE" "$CONFIG_FILE" 2>/dev/null; then
-    echo "ℹ️  Theme already configured in $CURRENT_SHELL."
+    echo "ℹ️  Theme already configured in $CONFIG_FILE"
 else
-    echo "🔧 Injecting theme into shell config..."
+    echo "🔧 Injecting theme into $CURRENT_SHELL config..."
     echo "" >> "$CONFIG_FILE"
     echo "# Lynxz OhMyPosh Theme" >> "$CONFIG_FILE"
     echo "$INIT_LINE" >> "$CONFIG_FILE"
@@ -186,6 +205,14 @@ else
 fi
 
 echo ""
+
+# Verify injection
+if ! grep -Fq "oh-my-posh" "$CONFIG_FILE"; then
+    echo "⚠️  WARNING: Failed to inject theme into $CONFIG_FILE"
+    echo "Please add manually:"
+    echo "$INIT_LINE"
+    exit 1
+fi
 
 # -----------------------------
 # Configure Kitty Terminal (if installed)
@@ -199,20 +226,28 @@ if command -v kitty &> /dev/null; then
     touch "$KITTY_CONFIG"
     
     # Check if font is already configured
-    if grep -q "^font_family.*JetBrainsMono" "$KITTY_CONFIG" 2>/dev/null; then
+    if grep -q "^font_family" "$KITTY_CONFIG" 2>/dev/null; then
         echo "ℹ️  Kitty font already configured."
     else
         echo "🔧 Setting Kitty font..."
         echo "" >> "$KITTY_CONFIG"
         echo "# OhMyPosh Font Configuration" >> "$KITTY_CONFIG"
         echo "font_family JetBrainsMono Nerd Font" >> "$KITTY_CONFIG"
-        echo "font_size 11" >> "$KITTY_CONFIG"
+        echo "font_size 11.0" >> "$KITTY_CONFIG"
         echo "✔ Kitty configured with JetBrainsMono Nerd Font"
     fi
     
     echo ""
 else
-    echo "ℹ️  Kitty not detected. Install it to auto-configure fonts."
+    echo "ℹ️  Kitty not detected."
+fi
+
+# Test oh-my-posh configuration
+echo "🧪 Testing oh-my-posh configuration..."
+if oh-my-posh print-config --config "$TARGET_THEME" > /dev/null 2>&1; then
+    echo "✔ Configuration is valid"
+else
+    echo "⚠️  Configuration validation failed"
 fi
 
 echo ""
@@ -222,13 +257,22 @@ echo "======================================"
 echo ""
 echo "🎉 Lynxz OhMyPosh theme is ready!"
 echo ""
-echo "Next steps:"
-echo "  1. Restart your terminal or run: source $CONFIG_FILE"
+echo "📝 Next steps:"
+echo "  1. Close and reopen your terminal (or source the config file)"
+if [ "$CURRENT_SHELL" = "bash" ]; then
+    echo "     source ~/.bashrc"
+elif [ "$CURRENT_SHELL" = "zsh" ]; then
+    echo "     source ~/.zshrc"
+elif [ "$CURRENT_SHELL" = "fish" ]; then
+    echo "     source ~/.config/fish/config.fish"
+fi
 if command -v kitty &> /dev/null; then
-    echo "  2. Restart Kitty to apply font changes"
+    echo "  2. Restart Kitty for font changes to take effect"
     echo "  3. Customize theme: nano ~/.config/ohmyposh/lynxz.omp.json"
 else
     echo "  2. Customize theme: nano ~/.config/ohmyposh/lynxz.omp.json"
 fi
-echo "  3. Check docs: https://ohmyposh.dev/docs/configuration/overview"
+echo ""
+echo "📚 Check docs: https://ohmyposh.dev/docs/configuration/overview"
+echo "🐛 Troubleshoot: oh-my-posh print-config --config ~/.config/ohmyposh/lynxz.omp.json"
 echo ""
